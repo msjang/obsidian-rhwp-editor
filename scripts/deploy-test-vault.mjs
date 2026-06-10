@@ -6,7 +6,7 @@ const projectRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 await loadEnv(path.join(projectRoot, ".env"));
 
-const targetDir = process.env.OBSIDIAN_RHWP_PLUGIN_DIR;
+const targetDir = expandHome(process.env.OBSIDIAN_RHWP_PLUGIN_DIR);
 
 if (!targetDir) {
   throw new Error(
@@ -26,6 +26,13 @@ await cp(path.join(projectRoot, "rhwp-studio"), path.join(targetDir, "rhwp-studi
 });
 
 console.log(`Deployed HWPX Editor to ${targetDir}`);
+
+function expandHome(value) {
+  if (!value) return value;
+  if (value === "~") return process.env.HOME ?? value;
+  if (value.startsWith("~/")) return path.join(process.env.HOME ?? "~", value.slice(2));
+  return value;
+}
 
 async function loadEnv(filePath) {
   let text;
