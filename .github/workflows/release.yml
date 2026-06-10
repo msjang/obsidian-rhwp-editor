@@ -48,21 +48,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           notes_file="$(mktemp)"
-          node - "$GITHUB_REF_NAME" "$notes_file" <<'NODE'
-          const fs = require('fs');
-          const [tag, outPath] = process.argv.slice(2);
-          const fallback = `Release ${tag}\n`;
-          let notes = fallback;
+          awk -v tag="$GITHUB_REF_NAME" '
+            $0 == "## " tag { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' RELEASE_NOTES.md > "$notes_file"
 
-          try {
-            const text = fs.readFileSync('RELEASE_NOTES.md', 'utf8');
-            const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const match = text.match(new RegExp(`^## ${escapedTag}\\n([\\s\\S]*?)(?=\\n## |\\n?$)`, 'm'));
-            if (match) notes = match[1].trim() + '\n';
-          } catch {}
+          if ! test -s "$notes_file"; then
+            echo "Release $GITHUB_REF_NAME" > "$notes_file"
+          fi
 
-          fs.writeFileSync(outPath, notes);
-          NODE
+          cat "$notes_file"
 
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" \
