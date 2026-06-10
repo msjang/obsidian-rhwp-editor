@@ -27,6 +27,7 @@ const BYTES_PER_MB = 1024 * 1024;
 const RELEASE_ZIP_NAME = "rhwp-editor.zip";
 const ASSET_MARKER_FILE = "rhwp-assets.json";
 const ASSET_PATHS = ["rhwp_bg.wasm", "rhwp-studio/index.html"];
+const GENERATED_STUDIO_DIR = "rhwp-studio-obsidian";
 const ZIP_LOCAL_FILE_HEADER = 0x04034b50;
 const ZIP_CENTRAL_DIRECTORY_HEADER = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
@@ -250,15 +251,163 @@ export default class RhwpPlugin extends Plugin {
     return wasmPath;
   }
 
-  getStudioUrl(): string {
+  async getStudioUrl(): Promise<string> {
+    await this.ensureAssetsReady();
+    await this.ensureStudioEntryPoint();
+
+    return this.getResourceUrl(`${GENERATED_STUDIO_DIR}/index.html`);
+  }
+
+  private getResourceUrl(relativePath: string): string {
     const adapter = this.app.vault.adapter;
-    const studioPath = normalizePath(`${this.manifest.dir}/rhwp-studio/index.html`);
+    const pluginPath = this.getPluginPath(relativePath);
 
     if ("getResourcePath" in adapter && typeof adapter.getResourcePath === "function") {
-      return adapter.getResourcePath(studioPath);
+      return adapter.getResourcePath(pluginPath);
     }
 
-    return studioPath;
+    return pluginPath;
+  }
+
+  private async ensureStudioEntryPoint(): Promise<void> {
+    const sourceIndexPath = this.getPluginPath("rhwp-studio/index.html");
+    const indexHtml = await this.app.vault.adapter.read(sourceIndexPath);
+    const mainScriptPath = findHtmlAssetPath(indexHtml, "script", "src", /\/assets\/index-[^/]+\.js$/);
+    const stylePath = findHtmlAssetPath(indexHtml, "link", "href", /\/assets\/index-[^/]+\.css$/);
+
+    if (!mainScriptPath || !stylePath) {
+      throw new Error("rhwp-studio entry assets could not be found.");
+    }
+
+    const sourceMainPath = resolveStudioPath("rhwp-studio/index.html", mainScriptPath);
+    const sourceStylePath = resolveStudioPath("rhwp-studio/index.html", stylePath);
+    const mainFileName = sourceMainPath.split("/").pop();
+    const styleFileName = sourceStylePath.split("/").pop();
+
+    if (!mainFileName || !styleFileName) {
+      throw new Error("rhwp-studio entry asset names could not be resolved.");
+    }
+
+    const generatedMainPath = `${GENERATED_STUDIO_DIR}/assets/${mainFileName}`;
+    const generatedStylePath = `${GENERATED_STUDIO_DIR}/assets/${styleFileName}`;
+    let mainJs = await this.app.vault.adapter.read(this.getPluginPath(sourceMainPath));
+    const wasmPath = findMainWasmPath(mainJs);
+    if (wasmPath) {
+      const sourceWasmPath = resolveStudioPath(sourceMainPath, wasmPath);
+      const wasmBytes = await this.app.vault.adapter.readBinary(this.getPluginPath(sourceWasmPath));
+      mainJs = inlineRhwpWasm(mainJs, arrayBufferToBase64(wasmBytes));
+    }
+
+    let rendererSourcePath: string | null = null;
+    let generatedRendererPath: string | null = null;
+
+    const rendererImportPath = findRendererImportPath(mainJs);
+    if (rendererImportPath) {
+      rendererSourcePath = resolveStudioPath(sourceMainPath, rendererImportPath);
+      const rendererFileName = rendererSourcePath.split("/").pop();
+
+      if (rendererFileName) {
+        generatedRendererPath = `${GENERATED_STUDIO_DIR}/assets/${rendererFileName}`;
+        let rendererJs = await this.app.vault.adapter.read(this.getPluginPath(rendererSourcePath));
+        rendererJs = rendererJs.replaceAll(`from"./${mainFileName}"`, `from"${this.getResourceUrl(generatedMainPath)}"`);
+        rendererJs = this.rewriteStudioJavaScriptUrls(rendererJs);
+        await this.writeGeneratedAsset(generatedRendererPath, rendererJs);
+        mainJs = mainJs.replaceAll(
+          rendererImportPath,
+          toJavaScriptStringContent(this.getResourceUrl(generatedRendererPath), "`")
+        );
+      }
+    }
+
+    mainJs = this.rewriteStudioJavaScriptUrls(mainJs);
+    await this.writeGeneratedAsset(generatedMainPath, mainJs);
+
+    const styleCss = await this.app.vault.adapter.read(this.getPluginPath(sourceStylePath));
+    const generatedStyleCss = await this.rewriteStudioCssUrls(styleCss, sourceStylePath);
+
+    const generatedIndexHtml = this.rewriteStudioHtmlUrls(indexHtml, new Map([
+      [sourceMainPath, generatedMainPath],
+      [sourceStylePath, generatedStylePath],
+      ...(rendererSourcePath && generatedRendererPath ? ([[rendererSourcePath, generatedRendererPath]] as const) : [])
+    ]), {
+      scriptPath: mainScriptPath,
+      scriptContent: mainJs,
+      stylePath,
+      styleContent: generatedStyleCss
+    });
+    await this.writeGeneratedAsset(`${GENERATED_STUDIO_DIR}/index.html`, generatedIndexHtml);
+  }
+
+  private rewriteStudioHtmlUrls(
+    html: string,
+    generatedPaths: Map<string, string>,
+    inlineAssets: {
+      scriptPath: string;
+      scriptContent: string;
+      stylePath: string;
+      styleContent: string;
+    }
+  ): string {
+    const withInlineScript = html.replace(
+      new RegExp(`<script\\b([^>]*)\\bsrc="${escapeRegExp(inlineAssets.scriptPath)}"([^>]*)></script>`),
+      (_match, before: string, after: string) =>
+        `<script${before}${after}>${escapeInlineScript(inlineAssets.scriptContent)}</script>`
+    );
+    const withInlineStyle = withInlineScript.replace(
+      new RegExp(`<link\\b([^>]*)\\bhref="${escapeRegExp(inlineAssets.stylePath)}"([^>]*)>`),
+      `<style>${escapeInlineStyle(inlineAssets.styleContent)}</style>`
+    );
+
+    return withInlineStyle.replace(/\b(src|href)="([^"]+)"/g, (match, attribute: string, rawUrl: string) => {
+      if (isExternalUrl(rawUrl)) {
+        return match;
+      }
+
+      const sourcePath = resolveStudioPath("rhwp-studio/index.html", rawUrl);
+      const targetPath = generatedPaths.get(sourcePath) ?? sourcePath;
+      return `${attribute}="${escapeHtmlAttribute(this.getResourceUrl(targetPath))}"`;
+    });
+  }
+
+  private async rewriteStudioCssUrls(css: string, sourceCssPath: string): Promise<string> {
+    const replacements = new Map<string, string>();
+    const matches = [...css.matchAll(/url\((["']?)([^"')]+)\1\)/g)];
+
+    for (const match of matches) {
+      const rawUrl = match[2];
+      if (isExternalUrl(rawUrl)) {
+        continue;
+      }
+
+      const sourcePath = resolveStudioPath(sourceCssPath, rawUrl);
+      const nextUrl = sourcePath.endsWith(".svg")
+        ? encodeSvgDataUrl(await this.app.vault.adapter.read(this.getPluginPath(sourcePath)))
+        : this.getResourceUrl(sourcePath);
+      replacements.set(match[0], `url("${nextUrl}")`);
+    }
+
+    let rewritten = css;
+    for (const [from, to] of replacements) {
+      rewritten = rewritten.replaceAll(from, to);
+    }
+
+    return rewritten;
+  }
+
+  private rewriteStudioJavaScriptUrls(js: string): string {
+    return js.replace(/(["'`])((?:\/assets|fonts)\/[^"'`]+?)(\1)/g, (match, quote: string, rawPath: string) => {
+      const sourcePath = rawPath.startsWith("/assets/")
+        ? normalizePath(`rhwp-studio${rawPath}`)
+        : normalizePath(`rhwp-studio/${rawPath}`);
+
+      return `${quote}${toJavaScriptStringContent(this.getResourceUrl(sourcePath), quote)}${quote}`;
+    });
+  }
+
+  private async writeGeneratedAsset(relativePath: string, text: string): Promise<void> {
+    const targetPath = this.getPluginPath(relativePath);
+    await this.ensureParentFolder(targetPath);
+    await this.app.vault.adapter.write(targetPath, text);
   }
 
   private async ensureBundledAssets(): Promise<void> {
@@ -885,7 +1034,7 @@ class RhwpFileView extends FileView {
       }
 
       const editor = await createEditor(hostEl, {
-        studioUrl: this.plugin.getStudioUrl(),
+        studioUrl: await this.plugin.getStudioUrl(),
         width: "100%",
         height: "100%"
       });
@@ -1379,6 +1528,121 @@ function isInstallableAssetPath(relativePath: string): boolean {
     relativePath === ASSET_MARKER_FILE ||
     relativePath.startsWith("rhwp-studio/")
   );
+}
+
+function findHtmlAssetPath(html: string, tagName: string, attributeName: string, pattern: RegExp): string | null {
+  const tagPattern = new RegExp(`<${tagName}\\b[^>]*\\b${attributeName}="([^"]+)"[^>]*>`, "gi");
+  let match: RegExpExecArray | null;
+
+  while ((match = tagPattern.exec(html))) {
+    const value = match[1];
+    if (pattern.test(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function findRendererImportPath(js: string): string | null {
+  return /import\(`(\.\/canvaskit-renderer-[^`]+\.js)`\)/.exec(js)?.[1] ?? null;
+}
+
+function findMainWasmPath(js: string): string | null {
+  return /["'`]((?:\/assets|\.\/assets)\/rhwp_bg-[^"'`]+\.wasm)["'`]/.exec(js)?.[1] ?? null;
+}
+
+function inlineRhwpWasm(js: string, wasmBase64: string): string {
+  const decoder = `function __rhwpDecodeInlineWasm(){let e="${wasmBase64}",t=atob(e),n=new Uint8Array(t.length);for(let e=0;e<t.length;e+=1)n[e]=t.charCodeAt(e);return n}`;
+  const withDecoder = `${decoder};${js}`;
+
+  return withDecoder.replace("await j()", "await j({module_or_path:__rhwpDecodeInlineWasm()})");
+}
+
+function resolveStudioPath(sourcePath: string, targetPath: string): string {
+  const cleanTarget = targetPath.split("#")[0].split("?")[0];
+
+  if (cleanTarget.startsWith("/assets/")) {
+    return normalizePath(`rhwp-studio${cleanTarget}`);
+  }
+
+  if (cleanTarget.startsWith("/")) {
+    return normalizePath(`rhwp-studio${cleanTarget}`);
+  }
+
+  const sourceParts = sourcePath.split("/");
+  sourceParts.pop();
+
+  const parts = [...sourceParts, ...cleanTarget.split("/")];
+  const resolved: string[] = [];
+
+  for (const part of parts) {
+    if (!part || part === ".") {
+      continue;
+    }
+
+    if (part === "..") {
+      resolved.pop();
+      continue;
+    }
+
+    resolved.push(part);
+  }
+
+  return normalizePath(resolved.join("/"));
+}
+
+function isExternalUrl(url: string): boolean {
+  return /^(?:[a-z][a-z0-9+.-]*:|#)/i.test(url);
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeInlineScript(value: string): string {
+  return value.replace(/<\/script/gi, "<\\/script");
+}
+
+function escapeInlineStyle(value: string): string {
+  return value.replace(/<\/style/gi, "<\\/style");
+}
+
+function encodeSvgDataUrl(svg: string): string {
+  return `data:image/svg+xml,${encodeURIComponent(svg)
+    .replace(/'/g, "%27")
+    .replace(/"/g, "%22")}`;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+function toJavaScriptStringContent(value: string, quote: string): string {
+  const escaped = value.replace(/\\/g, "\\\\");
+
+  if (quote === "`") {
+    return escaped.replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+  }
+
+  return escaped.replace(new RegExp(`\\${quote}`, "g"), `\\${quote}`);
 }
 
 function getErrorMessage(error: unknown): string {
