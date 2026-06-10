@@ -24,7 +24,7 @@ import JSZip from "jszip";
 const VIEW_TYPE_RHWP = "rhwp-view";
 const RHWP_CORE_VERSION = "0.7.13";
 const BYTES_PER_MB = 1024 * 1024;
-const RELEASE_ZIP_NAME = "obsidian-rhwp.zip";
+const RELEASE_ZIP_NAME = "rhwp-editor.zip";
 const ASSET_MARKER_FILE = "rhwp-assets.json";
 const ASSET_PATHS = ["rhwp_bg.wasm", "rhwp-studio/index.html"];
 
@@ -337,7 +337,7 @@ export default class RhwpPlugin extends Plugin {
   }
 
   private getReleaseZipUrl(): string {
-    return `https://github.com/msjang/obsidian-rhwp/releases/download/${this.manifest.version}/${RELEASE_ZIP_NAME}`;
+    return `https://github.com/msjang/obsidian-rhwp-editor/releases/download/${this.manifest.version}/${RELEASE_ZIP_NAME}`;
   }
 
   private async writeAssetMarker(): Promise<void> {

@@ -5,7 +5,7 @@ import JSZip from "jszip";
 
 const projectRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const releaseDir = path.join(projectRoot, "release");
-const zipName = "obsidian-rhwp.zip";
+const zipName = "rhwp-editor.zip";
 const standardAssets = ["main.js", "manifest.json", "styles.css"];
 const bundledAssets = ["rhwp_bg.wasm", "rhwp-studio"];
 

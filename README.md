@@ -1,7 +1,7 @@
 # rHWP Editor for Obsidian
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue?style=flat-square)](https://github.com/msjang/obsidian-rhwp)
-[![License](https://img.shields.io/github/license/msjang/obsidian-rhwp?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue?style=flat-square)](https://github.com/msjang/obsidian-rhwp-editor)
+[![License](https://img.shields.io/github/license/msjang/obsidian-rhwp-editor?style=flat-square)](LICENSE)
 [![Obsidian](https://img.shields.io/badge/Obsidian-desktop%20plugin-7C3AED?style=flat-square)](https://obsidian.md)
 [![HWP/HWPX](https://img.shields.io/badge/HWP%2FHWPX-rhwp-2F855A?style=flat-square)](https://github.com/edwardkim/rhwp)
 
@@ -38,7 +38,7 @@ Large files can make Obsidian slow while rendering. rHWP Editor can ask before o
 
 ## Development
 
-Refer to [dev/prj](https://github.com/msjang/obsidian-rhwp/tree/dev/prj) for development, verification, and release processes.
+Refer to [dev/prj](https://github.com/msjang/obsidian-rhwp-editor/tree/dev/prj) for development, verification, and release processes.
 
 
 ---
@@ -72,4 +72,4 @@ Refer to [dev/prj](https://github.com/msjang/obsidian-rhwp/tree/dev/prj) for dev
 
 ## 개발
 
-개발, 검증, 릴리스 과정은 [dev 브랜치의 prj/](https://github.com/msjang/obsidian-rhwp/tree/dev/prj)를 참고해주세요.
+개발, 검증, 릴리스 과정은 [dev 브랜치의 prj/](https://github.com/msjang/obsidian-rhwp-editor/tree/dev/prj)를 참고해주세요.

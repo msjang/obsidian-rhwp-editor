@@ -38,10 +38,10 @@ jobs:
           test -f release/main.js
           test -f release/manifest.json
           test -f release/styles.css
-          test -f release/obsidian-rhwp.zip
-          unzip -l release/obsidian-rhwp.zip | grep -q "rhwp_bg.wasm"
-          unzip -l release/obsidian-rhwp.zip | grep -q "rhwp-studio/index.html"
-          unzip -l release/obsidian-rhwp.zip | grep -q "rhwp-assets.json"
+          test -f release/rhwp-editor.zip
+          unzip -l release/rhwp-editor.zip | grep -q "rhwp_bg.wasm"
+          unzip -l release/rhwp-editor.zip | grep -q "rhwp-studio/index.html"
+          unzip -l release/rhwp-editor.zip | grep -q "rhwp-assets.json"
 
       - name: Create or update GitHub Release
         env:
@@ -52,14 +52,14 @@ jobs:
               release/main.js \
               release/manifest.json \
               release/styles.css \
-              release/obsidian-rhwp.zip \
+              release/rhwp-editor.zip \
               --clobber
           else
             gh release create "$GITHUB_REF_NAME" \
               release/main.js \
               release/manifest.json \
               release/styles.css \
-              release/obsidian-rhwp.zip \
+              release/rhwp-editor.zip \
               --title "$GITHUB_REF_NAME" \
               --notes "Release $GITHUB_REF_NAME"
           fi

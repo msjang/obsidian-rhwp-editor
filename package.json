@@ -1,6 +1,6 @@
 {
-  "name": "obsidian-rhwp",
-  "version": "0.2.0",
+  "name": "obsidian-rhwp-editor",
+  "version": "0.2.1",
   "description": "Obsidian plugin for opening, creating, and editing HWP/HWPX files with rhwp.",
   "main": "main.js",
   "scripts": {
@@ -18,12 +18,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/msjang/obsidian-rhwp.git"
+    "url": "git+https://github.com/msjang/obsidian-rhwp-editor.git"
   },
   "bugs": {
-    "url": "https://github.com/msjang/obsidian-rhwp/issues"
+    "url": "https://github.com/msjang/obsidian-rhwp-editor/issues"
   },
-  "homepage": "https://github.com/msjang/obsidian-rhwp#readme",
+  "homepage": "https://github.com/msjang/obsidian-rhwp-editor#readme",
   "dependencies": {
     "@rhwp/core": "^0.7.13",
     "@rhwp/editor": "^0.7.13",
