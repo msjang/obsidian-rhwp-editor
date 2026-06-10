@@ -25,6 +25,7 @@
 - [x] 빌드 결과물을 로컬 Obsidian 테스트 vault로 배포.
 - [x] 프로젝트 워크스페이스와 플러그인 저장소를 단일 `obsidian-rhwp` 저장소로 통합.
 - [x] `rhwp-studio`를 포함하고 편집 모드가 로컬 iframe 자산을 가리키도록 변경.
+- [x] Obsidian 커뮤니티 설치의 release asset 처리 방식을 재확인하고 추가 자산 검증 필요성 기록.
 
 ## 진행 중
 
@@ -35,6 +36,8 @@
 - [x] Obsidian에서 컨텍스트 메뉴의 빈 HWP/HWPX 생성 검증.
 - [ ] Obsidian에서 큰 파일 확인창 검증.
 - [ ] read-only/편집 모드의 속성 패널 레이아웃 검증.
+- [ ] 커뮤니티 플러그인 설치에서 `rhwp_bg.wasm`과 `rhwp-studio/` 자산이 함께 설치되는지 검증.
+- [ ] 추가 자산 설치 검증 후 GitHub Release asset과 Obsidian 커뮤니티 제출 절차 확정.
 - [x] Obsidian에서 read-only 인라인 이름 변경 검증.
 
 ## 나중에
