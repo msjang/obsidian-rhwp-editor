@@ -51,3 +51,14 @@
 - GitHub Release tag는 `manifest.json`의 `version`과 같은 값으로 만듭니다.
 - GitHub Release asset에는 Obsidian이 직접 받는 `main.js`, `manifest.json`, `styles.css`와 추가 자산 설치에 쓰는 `obsidian-rhwp.zip`을 올립니다.
 - HWP/HWPX 파일을 열었을 때 문서 페이지가 렌더링되거나, 실패 시 읽을 수 있는 오류가 표시됩니다.
+
+## GitHub Actions 릴리스
+
+`.github/workflows/release.yml`은 `0.2.0`처럼 `*.*.*` 형식의 tag가 push되면 실행됩니다.
+
+1. `npm ci`로 의존성을 설치합니다.
+2. tag 이름, `manifest.json` 버전, `package.json` 버전이 같은지 확인합니다.
+3. `npm run package:release`로 릴리즈 산출물을 만듭니다.
+4. `release/main.js`, `release/manifest.json`, `release/styles.css`, `release/obsidian-rhwp.zip`을 GitHub Release asset으로 업로드합니다.
+
+따라서 릴리스할 때는 `manifest.json`과 `package.json`의 `version`을 먼저 맞추고 같은 이름의 tag를 push합니다.

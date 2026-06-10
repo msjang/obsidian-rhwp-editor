@@ -29,6 +29,7 @@
 - [x] `obsidian-advanced-slides` 사례를 확인해 추가 자산이 플러그인 런타임 self-hydration으로 설치됨을 검증.
 - [x] `rhwp_bg.wasm`과 `rhwp-studio/`를 GitHub Release zip에서 설치하는 self-hydration 로직 추가.
 - [x] `main.js`, `manifest.json`, `styles.css`, `obsidian-rhwp.zip` 릴리즈 산출물 생성 스크립트 추가.
+- [x] tag push 시 GitHub Release asset을 생성/업로드하는 GitHub Actions workflow 추가.
 
 ## 진행 중
 
@@ -42,7 +43,7 @@
 - [x] 커뮤니티 플러그인 설치에서 `rhwp_bg.wasm`과 `rhwp-studio/` 자산이 함께 설치되는지 검증.
 - [x] 추가 자산 설치 검증 후 GitHub Release asset과 Obsidian 커뮤니티 제출 절차 확정.
 - [x] Obsidian에서 read-only 인라인 이름 변경 검증.
-- [ ] GitHub Release `0.2.0`에 `main.js`, `manifest.json`, `styles.css`, `obsidian-rhwp.zip` 업로드.
+- [ ] tag `0.2.0` push 후 GitHub Release `0.2.0`에 `main.js`, `manifest.json`, `styles.css`, `obsidian-rhwp.zip`이 업로드되는지 확인.
 - [ ] 새 vault에서 커뮤니티 설치와 동일한 경로로 self-hydration 동작 확인.
 - [ ] `obsidianmd/obsidian-releases`에 community plugin 등록 PR 작성.
 
