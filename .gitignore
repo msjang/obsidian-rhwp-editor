@@ -1,0 +1,6 @@
+node_modules/
+main.js
+*.map
+rhwp_bg.wasm
+.DS_Store
+.env
