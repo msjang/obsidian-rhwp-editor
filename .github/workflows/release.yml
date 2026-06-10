@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
-  attestations: write
 
 jobs:
   release:
@@ -45,19 +43,27 @@ jobs:
           unzip -l release/rhwp-editor.zip | grep -q "rhwp-studio/index.html"
           unzip -l release/rhwp-editor.zip | grep -q "rhwp-assets.json"
 
-      - name: Generate artifact attestations
-        uses: actions/attest@v4
-        with:
-          subject-path: |
-            release/main.js
-            release/manifest.json
-            release/styles.css
-            release/rhwp-editor.zip
-
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          notes_file="$(mktemp)"
+          node - "$GITHUB_REF_NAME" "$notes_file" <<'NODE'
+          const fs = require('fs');
+          const [tag, outPath] = process.argv.slice(2);
+          const fallback = `Release ${tag}\n`;
+          let notes = fallback;
+
+          try {
+            const text = fs.readFileSync('RELEASE_NOTES.md', 'utf8');
+            const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = text.match(new RegExp(`^## ${escapedTag}\\n([\\s\\S]*?)(?=\\n## |\\n?$)`, 'm'));
+            if (match) notes = match[1].trim() + '\n';
+          } catch {}
+
+          fs.writeFileSync(outPath, notes);
+          NODE
+
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" \
               release/main.js \
@@ -65,6 +71,8 @@ jobs:
               release/styles.css \
               release/rhwp-editor.zip \
               --clobber
+            gh release edit "$GITHUB_REF_NAME" \
+              --notes-file "$notes_file"
           else
             gh release create "$GITHUB_REF_NAME" \
               release/main.js \
@@ -72,5 +80,5 @@ jobs:
               release/styles.css \
               release/rhwp-editor.zip \
               --title "$GITHUB_REF_NAME" \
-              --notes "Release $GITHUB_REF_NAME"
+              --notes-file "$notes_file"
           fi
