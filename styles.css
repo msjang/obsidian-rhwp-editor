@@ -219,6 +219,18 @@
   color: var(--text-error);
 }
 
+.rhwp-print-preview-view {
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.rhwp-print-preview-frame {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
 .rhwp-secondary-button {
   color: var(--text-muted);
 }

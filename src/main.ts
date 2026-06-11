@@ -1,6 +1,7 @@
 import {
   App,
   FileView,
+  ItemView,
   Modal,
   Notice,
   Plugin,
@@ -18,10 +19,11 @@ import {
 } from "obsidian";
 import initRhwp, { HwpDocument } from "@rhwp/core";
 import { createEditor } from "@rhwp/editor";
-import type { RhwpEditor } from "@rhwp/editor";
+import type { EditorOptions, RhwpEditor } from "@rhwp/editor";
 import { inflateRawSync } from "zlib";
 
 const VIEW_TYPE_RHWP = "rhwp-view";
+const VIEW_TYPE_RHWP_PRINT_PREVIEW = "rhwp-print-preview";
 const RHWP_CORE_VERSION = "0.7.15";
 const BYTES_PER_MB = 1024 * 1024;
 const RELEASE_ZIP_NAME = "rhwp-editor.zip";
@@ -50,6 +52,14 @@ interface ReleaseZipEntry {
   directory: boolean;
   bytes: Uint8Array;
 }
+
+interface RhwpPrintPreviewPayload {
+  requestId: string;
+  title: string;
+  html: string;
+}
+
+const printPreviewRequests = new Map<string, RhwpPrintPreviewPayload>();
 
 const DEFAULT_SETTINGS: RhwpSettings = {
   newFileFormat: "hwp",
@@ -186,9 +196,13 @@ export default class RhwpPlugin extends Plugin {
     });
 
     this.registerView(VIEW_TYPE_RHWP, (leaf) => new RhwpFileView(leaf, this));
+    this.registerView(VIEW_TYPE_RHWP_PRINT_PREVIEW, (leaf) => new RhwpPrintPreviewView(leaf));
     this.registerExtensions(["hwp", "hwpx"], VIEW_TYPE_RHWP);
     this.registerFileMenu();
     this.addSettingTab(new RhwpSettingTab(this.app, this));
+    this.registerDomEvent(window, "message", (event) => {
+      void this.handlePrintPreviewMessage(event);
+    });
 
     this.addCommand({
       id: "reload-rhwp-view",
@@ -242,6 +256,51 @@ export default class RhwpPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  private async handlePrintPreviewMessage(event: MessageEvent): Promise<void> {
+    const data = event.data as {
+      type?: string;
+      requestId?: unknown;
+      title?: unknown;
+      html?: unknown;
+    };
+
+    if (data?.type === "rhwp-print-preview-close") {
+      if (typeof data.requestId === "string") {
+        printPreviewRequests.delete(data.requestId);
+      }
+      return;
+    }
+
+    if (data?.type !== "rhwp-print-preview-ready") {
+      return;
+    }
+
+    if (typeof data.requestId !== "string" || typeof data.html !== "string") {
+      return;
+    }
+
+    const payload: RhwpPrintPreviewPayload = {
+      requestId: data.requestId,
+      title: typeof data.title === "string" && data.title.trim() ? data.title : "rHWP Print Preview",
+      html: data.html
+    };
+    printPreviewRequests.set(payload.requestId, payload);
+
+    try {
+      const leaf = this.app.workspace.openPopoutLeaf({
+        size: { width: 960, height: 720 }
+      });
+      await leaf.setViewState({
+        type: VIEW_TYPE_RHWP_PRINT_PREVIEW,
+        active: true,
+        state: { requestId: payload.requestId }
+      });
+    } catch (error) {
+      printPreviewRequests.delete(payload.requestId);
+      new Notice(`인쇄 미리보기 창을 열지 못했습니다: ${getErrorMessage(error)}`);
+    }
   }
 
   async ensureRhwpReady(): Promise<void> {
@@ -320,6 +379,7 @@ export default class RhwpPlugin extends Plugin {
       const wasmBytes = await this.app.vault.adapter.readBinary(this.getPluginPath(sourceWasmPath));
       mainJs = inlineRhwpWasm(mainJs, arrayBufferToBase64(wasmBytes));
     }
+    mainJs = `${getRhwpPrintPreviewBridgeScript()}\n${mainJs}`;
 
     let rendererSourcePath: string | null = null;
     let generatedRendererPath: string | null = null;
@@ -739,6 +799,144 @@ function getAdapterFullPath(adapter: unknown, normalizedPath: string): string {
   return maybeAdapter.getFullPath(normalizedPath);
 }
 
+function configureRhwpEditorIframe(iframe: HTMLIFrameElement): void {
+  const allowDirectives = new Set(
+    (iframe.getAttribute("allow") ?? "")
+      .split(";")
+      .map((directive) => directive.trim())
+      .filter(Boolean)
+  );
+  allowDirectives.add("clipboard-read");
+  allowDirectives.add("clipboard-write");
+  allowDirectives.add("popups");
+  iframe.setAttribute("allow", Array.from(allowDirectives).join("; "));
+
+  const sandboxTokens = new Set(
+    (iframe.getAttribute("sandbox") ?? "")
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean)
+  );
+  [
+    "allow-downloads",
+    "allow-forms",
+    "allow-modals",
+    "allow-popups",
+    "allow-popups-to-escape-sandbox",
+    "allow-same-origin",
+    "allow-scripts"
+  ].forEach((token) => sandboxTokens.add(token));
+  iframe.setAttribute("sandbox", Array.from(sandboxTokens).join(" "));
+}
+
+async function createPopupEnabledEditor(container: HTMLElement, options: EditorOptions): Promise<RhwpEditor> {
+  const originalCreateElement = document.createElement.bind(document) as (
+    tagName: string,
+    options?: ElementCreationOptions
+  ) => HTMLElement;
+  const patchedCreateElement = ((tagName: string, optionsArg?: ElementCreationOptions) => {
+    const element = originalCreateElement(tagName, optionsArg);
+    if (tagName.toLowerCase() === "iframe") {
+      configureRhwpEditorIframe(element as HTMLIFrameElement);
+    }
+    return element;
+  }) as Document["createElement"];
+
+  let editorPromise: Promise<RhwpEditor>;
+  document.createElement = patchedCreateElement;
+  try {
+    editorPromise = createEditor(container, options);
+  } finally {
+    document.createElement = originalCreateElement as Document["createElement"];
+  }
+
+  const editor = await editorPromise;
+  configureRhwpEditorIframe(editor.element);
+  return editor;
+}
+
+class RhwpPrintPreviewView extends ItemView {
+  private requestId: string | null = null;
+  private payload: RhwpPrintPreviewPayload | null = null;
+
+  getViewType(): string {
+    return VIEW_TYPE_RHWP_PRINT_PREVIEW;
+  }
+
+  getDisplayText(): string {
+    return this.payload?.title ?? "rHWP Print Preview";
+  }
+
+  getIcon(): string {
+    return "printer";
+  }
+
+  async setState(state: unknown, result: ViewStateResult): Promise<void> {
+    await super.setState(state, result);
+    const requestId =
+      typeof state === "object" && state !== null && typeof (state as { requestId?: unknown }).requestId === "string"
+        ? (state as { requestId: string }).requestId
+        : null;
+
+    this.requestId = requestId;
+    this.payload = requestId ? printPreviewRequests.get(requestId) ?? null : null;
+    this.render();
+  }
+
+  getState(): Record<string, unknown> {
+    return {
+      ...super.getState(),
+      requestId: this.requestId
+    };
+  }
+
+  protected async onOpen(): Promise<void> {
+    this.render();
+  }
+
+  protected async onClose(): Promise<void> {
+    if (this.requestId) {
+      printPreviewRequests.delete(this.requestId);
+    }
+  }
+
+  private render(): void {
+    this.contentEl.empty();
+    this.contentEl.addClass("rhwp-print-preview-view");
+
+    if (!this.payload) {
+      this.contentEl.createDiv({ cls: "rhwp-message", text: "인쇄 미리보기를 찾을 수 없습니다." });
+      return;
+    }
+
+    const frame = this.contentEl.createEl("iframe", {
+      cls: "rhwp-print-preview-frame",
+      attr: {
+        sandbox: "allow-same-origin allow-scripts allow-modals",
+        title: this.payload.title
+      }
+    });
+    frame.style.width = "100%";
+    frame.style.height = "100%";
+    frame.style.border = "none";
+    frame.srcdoc = this.payload.html;
+
+    frame.addEventListener("load", () => {
+      const printDoc = frame.contentDocument;
+      const printWin = frame.contentWindow;
+      if (!printDoc || !printWin) return;
+
+      printDoc.getElementById("print-btn")?.addEventListener("click", () => {
+        printWin.focus();
+        printWin.print();
+      });
+      printDoc.getElementById("close-btn")?.addEventListener("click", () => {
+        this.leaf.detach();
+      });
+    });
+  }
+}
+
 class RhwpFileView extends FileView {
   private readonly plugin: RhwpPlugin;
   private pagesEl: HTMLElement | null = null;
@@ -1124,7 +1322,7 @@ class RhwpFileView extends FileView {
         throw new Error("Editor host could not be created.");
       }
 
-      const editor = await createEditor(hostEl, {
+      const editor = await createPopupEnabledEditor(hostEl, {
         studioUrl: await this.plugin.getStudioUrl(),
         width: "100%",
         height: "100%"
@@ -1648,6 +1846,72 @@ function inlineRhwpWasm(js: string, wasmBase64: string): string {
   const withDecoder = `${decoder};${js}`;
 
   return withDecoder.replace("await j()", "await j({module_or_path:__rhwpDecodeInlineWasm()})");
+}
+
+function getRhwpPrintPreviewBridgeScript(): string {
+  return `
+;(() => {
+  if (window.__rhwpObsidianPrintBridgeInstalled) return;
+  window.__rhwpObsidianPrintBridgeInstalled = true;
+  const originalOpen = window.open ? window.open.bind(window) : null;
+  window.open = (url, target, features) => {
+    const normalizedUrl = url == null ? '' : String(url);
+    const normalizedTarget = target == null ? '_blank' : String(target);
+    if (normalizedUrl !== '' || normalizedTarget !== '_blank') {
+      return originalOpen ? originalOpen(url, target, features) : null;
+    }
+
+    const requestId = 'rhwp-print-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    const previewDoc = document.implementation.createHTMLDocument('rHWP Print Preview');
+    let closed = false;
+    let posted = false;
+    let timer = 0;
+
+    const postPreview = () => {
+      if (closed || posted) return;
+      posted = true;
+      window.parent.postMessage({
+        type: 'rhwp-print-preview-ready',
+        requestId,
+        title: previewDoc.title || 'rHWP Print Preview',
+        html: '<!doctype html>\\n' + previewDoc.documentElement.outerHTML
+      }, '*');
+    };
+
+    const schedulePost = () => {
+      if (closed) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(postPreview, 120);
+    };
+
+    new MutationObserver(schedulePost).observe(previewDoc.documentElement, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+
+    return {
+      document: previewDoc,
+      get closed() {
+        return closed;
+      },
+      close() {
+        closed = true;
+        window.clearTimeout(timer);
+        window.parent.postMessage({ type: 'rhwp-print-preview-close', requestId }, '*');
+      },
+      focus() {},
+      blur() {},
+      print() {
+        postPreview();
+      },
+      addEventListener() {},
+      removeEventListener() {}
+    };
+  };
+})();
+`;
 }
 
 function resolveStudioPath(sourcePath: string, targetPath: string): string {

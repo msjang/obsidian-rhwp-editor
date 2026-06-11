@@ -1,5 +1,36 @@
 # 개발 노트
 
+## 2026-06-12: 인쇄 팝업 차단과 기본 앱 열기 개선
+
+요청:
+
+- 편집 모드에서 인쇄 버튼을 누르면 `팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.`가 표시되는 문제를 해결한다.
+- Obsidian 파일 탐색기의 `기본 앱에서 열기` / `Open in default app`과 같은 동작을 rHWP read-only/edit 뷰에서도 제공한다.
+
+초기 판단:
+
+- `rhwp-studio`의 인쇄 명령은 페이지 SVG를 만든 뒤 `window.open('', '_blank')`를 호출한다. 렌더링 중 `await`로 이벤트 루프를 양보하면 Obsidian/Electron이 더 이상 사용자 클릭 제스처로 보지 않아 팝업 차단으로 처리할 수 있다.
+- `@rhwp/editor`가 생성하는 iframe은 기본적으로 `clipboard-read; clipboard-write`만 허용한다. Obsidian/Electron 안에서는 이 iframe에서 여는 인쇄 미리보기 popup이 차단될 수 있다.
+- 최종 해결 방향은 기존 rHWP의 `window.open()` 기반 인쇄 미리보기 흐름을 유지하되, Obsidian 전용 런타임에서 빈 `_blank` popup을 브릿지로 가로채 부모 플러그인의 popout view로 표시하는 것이다.
+- 기본 앱 열기는 Obsidian desktop 전용 플러그인 조건을 활용해 vault adapter의 `getFullPath()`로 실제 파일 경로를 얻고 Electron `shell.openPath()`를 호출한다.
+
+구현:
+
+- `rhwp-studio`는 `edwardkim/rhwp` tag `v0.7.15` clean source를 다시 빌드했다. 별도 디버그 브랜치의 혼합 방향 인쇄 패치나 print command 패치는 포함하지 않았다. 해당 패치는 upstream `rhwp`에 정식 반영되면 다음 rhwp 버전 업데이트로 따라온다.
+- 플러그인은 `rhwp-studio-obsidian/` 런타임 엔트리포인트를 생성할 때 print preview bridge shim을 main JS 앞에 삽입한다.
+- shim은 `window.open('', '_blank')`만 가로채고, rHWP가 fake window의 document에 미리보기 HTML을 채우면 부모 플러그인으로 `rhwp-print-preview-ready` 메시지를 보낸다. 일반 외부 URL `window.open()`은 원래 동작에 맡긴다.
+- 부모 플러그인은 `rhwp-print-preview` view를 Obsidian `openPopoutLeaf()`로 열고, rHWP가 만든 미리보기 HTML을 iframe에 표시한다. 미리보기 안의 `인쇄` 버튼은 iframe 문서의 `print()`를 호출한다.
+- 플러그인은 `@rhwp/editor`가 iframe을 만들 때 `allow-popups`, `allow-popups-to-escape-sandbox`, `allow-modals` 등 popup/print에 필요한 iframe sandbox 권한도 함께 붙인다. 단, 실제 인쇄 미리보기 창은 Obsidian popout bridge가 담당한다.
+- rHWP 뷰 툴바에는 read-only/edit 모드 모두에서 보이는 `기본 앱에서 열기` 버튼을 추가했다. 같은 동작을 명령 팔레트에서도 실행할 수 있도록 `open-current-rhwp-in-default-app` 명령을 추가했다.
+- 로컬 테스트 vault 배포 시 이전에 생성된 `rhwp-studio-obsidian/` 캐시를 삭제하도록 배포 스크립트를 보강했다.
+
+검증:
+
+- clean `rhwp-studio@0.7.15` 빌드 성공.
+- `npm run build` 성공.
+- `npm run deploy:test-vault` 성공.
+- 로컬 테스트 vault 설치본에는 실행 중인 Obsidian의 release asset self-hydration을 피하기 위해 manifest/asset marker를 `0.2.4`로 맞춰두었다. 실제 `main.js`와 `rhwp-studio` 자산은 이번 수정 빌드다.
+
 ## 2026-06-11: 0.2.3 편집 모드 로컬 자산 로딩 수정
 
 ### 증상

@@ -22,6 +22,7 @@ for (const file of ["main.js", "manifest.json", "styles.css", "rhwp_bg.wasm"]) {
 
 const targetStudioDir = path.join(targetDir, "rhwp-studio");
 await rm(targetStudioDir, { recursive: true, force: true });
+await rm(path.join(targetDir, "rhwp-studio-obsidian"), { recursive: true, force: true });
 await cp(path.join(projectRoot, "rhwp-studio"), targetStudioDir, {
   recursive: true,
   force: true
