@@ -22,7 +22,7 @@ import type { RhwpEditor } from "@rhwp/editor";
 import { inflateRawSync } from "zlib";
 
 const VIEW_TYPE_RHWP = "rhwp-view";
-const RHWP_CORE_VERSION = "0.7.13";
+const RHWP_CORE_VERSION = "0.7.15";
 const BYTES_PER_MB = 1024 * 1024;
 const RELEASE_ZIP_NAME = "rhwp-editor.zip";
 const ASSET_MARKER_FILE = "rhwp-assets.json";

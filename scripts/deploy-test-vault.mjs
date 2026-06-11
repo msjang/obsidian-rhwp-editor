@@ -1,4 +1,4 @@
-import { cp, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +20,9 @@ for (const file of ["main.js", "manifest.json", "styles.css", "rhwp_bg.wasm"]) {
   await copyFile(path.join(projectRoot, file), path.join(targetDir, file));
 }
 
-await cp(path.join(projectRoot, "rhwp-studio"), path.join(targetDir, "rhwp-studio"), {
+const targetStudioDir = path.join(targetDir, "rhwp-studio");
+await rm(targetStudioDir, { recursive: true, force: true });
+await cp(path.join(projectRoot, "rhwp-studio"), targetStudioDir, {
   recursive: true,
   force: true
 });
@@ -31,7 +33,7 @@ await writeFile(
   JSON.stringify(
     {
       pluginVersion: manifest.version,
-      rhwpCoreVersion: "0.7.13"
+      rhwpCoreVersion: "0.7.15"
     },
     null,
     2

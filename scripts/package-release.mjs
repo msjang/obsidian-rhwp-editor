@@ -13,7 +13,7 @@ const manifest = JSON.parse(await readFile(path.join(projectRoot, "manifest.json
 const marker = JSON.stringify(
   {
     pluginVersion: manifest.version,
-    rhwpCoreVersion: "0.7.13"
+    rhwpCoreVersion: "0.7.15"
   },
   null,
   2
