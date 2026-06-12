@@ -1,5 +1,7 @@
 # Release Notes
 
+This English file is the source for GitHub Release automation. Korean companion notes live in `RELEASE_NOTES_KO.md`.
+
 ## 0.2.4
 
 ### Fixed

@@ -49,11 +49,14 @@
 - 빌드가 성공합니다.
 - `npm run package:release`가 성공하고 `release/`에 `main.js`, `manifest.json`, `styles.css`, `rhwp-editor.zip`이 생성됩니다.
 - `manifest.json`의 플러그인 id와 최소 Obsidian 버전이 맞습니다.
+- 루트 `RELEASE_NOTES.md`의 해당 tag 섹션을 영어로 갱신합니다. GitHub Release 자동화는 이 파일을 릴리스 본문으로 사용합니다.
+- 루트 `RELEASE_NOTES_KO.md`의 해당 tag 섹션을 한국어로 갱신합니다. 이 파일은 사용자가 읽는 companion 문서이며 자동화 입력이 아닙니다.
 - 플러그인 폴더에 `main.js`, `styles.css`, `rhwp_bg.wasm`, `rhwp-studio/`가 있습니다.
 - `rhwp-editor.zip` 안에 `rhwp_bg.wasm`, `rhwp-studio/`, `rhwp-assets.json`이 있습니다.
 - GitHub Release tag는 `manifest.json`의 `version`과 같은 값으로 만듭니다.
 - GitHub Release asset에는 Obsidian이 직접 받는 `main.js`, `manifest.json`, `styles.css`와 추가 자산 설치에 쓰는 `rhwp-editor.zip`을 올립니다.
 - `prj/`는 공개 저장소 문서로 유지하지만 release asset이나 `rhwp-editor.zip`에는 포함하지 않습니다.
+- `prj/`에는 중복 릴리스 노트를 두지 않습니다. 릴리스 기록은 루트 `RELEASE_NOTES.md`와 `RELEASE_NOTES_KO.md`만 갱신합니다.
 - `prj/`에 개인 경로, 토큰, 비공개 계정 정보가 없는지 확인합니다.
 - HWP/HWPX 파일을 열었을 때 문서 페이지가 렌더링되거나, 실패 시 읽을 수 있는 오류가 표시됩니다.
 - GitHub Release asset이 생성된 뒤 `https://community.obsidian.md/account/plugins/<plugin>`의 더보기 메뉴에서 `Check for new releases`를 실행합니다. 이 버튼을 눌러야 Obsidian 커뮤니티 포털이 새 릴리스를 확인하고 자동 테스트/리뷰 흐름을 시작합니다.
@@ -68,3 +71,5 @@
 4. `release/main.js`, `release/manifest.json`, `release/styles.css`, `release/rhwp-editor.zip`을 GitHub Release asset으로 업로드합니다.
 
 따라서 릴리스할 때는 `manifest.json`과 `package.json`의 `version`을 먼저 맞추고 같은 이름의 tag를 push합니다. GitHub Release가 생성된 뒤에는 Obsidian 커뮤니티 포털의 plugin page에서 `Check for new releases`를 눌러 새 릴리스 검사를 시작합니다.
+
+릴리스 본문은 루트 `RELEASE_NOTES.md`에서 tag 섹션을 추출합니다. 한국어 릴리스 기록은 루트 `RELEASE_NOTES_KO.md`에 별도로 유지하고, `prj/`에는 릴리스 노트 사본을 두지 않습니다.
