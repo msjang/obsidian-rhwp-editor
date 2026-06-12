@@ -2,6 +2,21 @@
 
 This English file is the source for GitHub Release automation. Korean companion notes live in `RELEASE_NOTES_KO.md`.
 
+## 0.2.6
+
+### Added
+
+- Added an `Open in default app` toolbar action for HWP/HWPX views, available from both read-only and edit modes.
+- Added a command palette action to open the current HWP/HWPX file with the system default app.
+
+### Fixed
+
+- Fixed editor print preview being blocked as a popup inside Obsidian by routing rHWP's existing print preview flow through an Obsidian popout view.
+
+### Changed
+
+- Updated the bundled `rhwp` runtime to `0.7.15`.
+
 ## 0.2.4
 
 ### Fixed
